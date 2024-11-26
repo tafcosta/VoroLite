@@ -1,59 +1,75 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from scipy.spatial import Delaunay
+from scipy.spatial import Delaunay, Voronoi, voronoi_plot_2d
 
-class Blocks:
-    def __init__(self, numBlocks, domainMin, domainMax):
+class Rays:
+    def __init__(self, nRays, startingPosition):
+        
+        self.nRays = nRays
+        self.kx = np.zeros(nRays)
+        self.ky	= np.zeros(nRays)
+        self.xPos = np.zeros(nRays)
+        self.yPos = np.zeros(nRays)
+        
+        for iRay in range(nRays):
+            self.phi = np.random.uniform(0, 2 * np.pi)
+            self.kx[iRay]   = np.cos(self.phi)
+            self.ky[iRay]   = np.sin(self.phi)
+            self.xPos[iRay] = startingPosition[0]
+            self.yPos[iRay] = startingPosition[1]
 
-        self.dx = (domainMax - domainMin)/numBlocks
-        self.numBlocks = numBlocks
+class Domain:
+    def __init__(self, domainMin, domainMax, nDim):
         self.domainMin = domainMin
         self.domainMax = domainMax
-        self.totalNumBlocks = numBlocks**3
-        
-        self.centers = np.zeros((self.totalNumBlocks, 3))
-        self.index = np.zeros(self.totalNumBlocks)
-        
-        iCount = 0
-        for iCell in range(numBlocks):
-            for jCell in range(numBlocks):
-                for kCell in range(numBlocks):
-        
-                    self.centers[iCell*numBlocks**2 + jCell*numBlocks + kCell] = [domainMin + (0.5 + iCell) * self.dx, domainMin + (0.5 + jCell) * self.dx, domainMin + (0.5 + kCell) * self.dx] 
-                    self.index[iCell*numBlocks**2 + jCell*numBlocks + kCell] = iCount
-                    iCount += 1
-                                
-def findHostCell(queryPointPosition, domainBlocks, domainMin, domainMax):
+        self.nDim = nDim
+            
+def findHostCell(queryPointPosition, domain, vor):
 
-    for i in range(3):
-        if(queryPointPosition[i] > domainMax or queryPointPosition[i] < domainMin):
+    for i in range(domain.nDim):
+        if(queryPointPosition[i] > domain.domainMax or queryPointPosition[i] < domain.domainMin):
             return -1
-
-    blockXIndex = np.floor((queryPointPosition[0] - domainMin) / domainBlocks.dx)
-    blockYIndex = np.floor((queryPointPosition[1] - domainMin) / domainBlocks.dx)
-    blockZIndex = np.floor((queryPointPosition[2] - domainMin) / domainBlocks.dx)
         
-    return 0
+    return np.argmin(np.linalg.norm(vor.points - queryPointPosition, axis=1))
 
 
-
-
-numBlocks =  8
 domainMin = -1.0
 domainMax =  1.0
+startingPoint  = np.array([0., 0.])
+numPoints = 32
 
-# Create a Blocks object
-blocks = Blocks(numBlocks, domainMin, domainMax)
+domain = Domain(domainMin, domainMax, 2)
 
+x = np.random.uniform(domainMin, domainMax, numPoints)
+y = np.random.uniform(domainMin, domainMax, numPoints)
+z = np.random.uniform(domainMin, domainMax, numPoints)
+pointCloud    = np.column_stack((x, y))
 
-num_points = 32
-x = np.random.uniform(domainMin, domainMax, num_points)
-y = np.random.uniform(domainMin, domainMax, num_points)
-z = np.random.uniform(domainMin, domainMax, num_points)
+nRays = 1
+rays = Rays(nRays, startingPoint)
 
-pointCloud    = np.column_stack((x, y, z))
 triangulation = Delaunay(pointCloud)
+voronoi = Voronoi(pointCloud)
 
-startingPoint = np.array([0., 0., 0.])
+indptr,indices = triangulation.vertex_neighbor_vertices
+numberNeighbours = indptr[1:]-indptr[:-1]
 
+startingCell   = findHostCell(startingPoint, domain, voronoi)
+
+propagate = True
+while(propagate):
+
+    s = 1.e10
+    for iNeighbour in range(numberNeighbours[startingCell]):
+        normalVector = pointCloud[startingCell] - pointCloud[indices[indptr[startingCell] + iNeighbour]]
+        pointOnInterface = (pointCloud[startingCell] + pointCloud[indices[indptr[startingCell] + iNeighbour]]) / 2.0
+
+        sTmp = np.dot(normalVector,  (pointOnInterface - startingPoint)) / np.dot(normalVector, np.array([rays.kx, rays.ky]))
+        if sTmp > 0:
+            if sTmp < s:
+                s = sTmp
+        
+        print(sTmp, s)
+
+    propagate = False
