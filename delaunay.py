@@ -6,23 +6,24 @@ from scipy.spatial import Delaunay
 class Blocks:
     def __init__(self, numBlocks, domainMin, domainMax):
 
-        self.dx = numBlocks/(domainMax - domainMin)
+        self.dx = (domainMax - domainMin)/numBlocks
         self.numBlocks = numBlocks
         self.domainMin = domainMin
         self.domainMax = domainMax
         self.totalNumBlocks = numBlocks**3
         
         self.centers = np.zeros((self.totalNumBlocks, 3))
+        self.index = np.zeros(self.totalNumBlocks)
+        
         iCount = 0
         for iCell in range(numBlocks):
             for jCell in range(numBlocks):
                 for kCell in range(numBlocks):
         
                     self.centers[iCell*numBlocks**2 + jCell*numBlocks + kCell] = [domainMin + (0.5 + iCell) * self.dx, domainMin + (0.5 + jCell) * self.dx, domainMin + (0.5 + kCell) * self.dx] 
-                    self.index = iCount
+                    self.index[iCell*numBlocks**2 + jCell*numBlocks + kCell] = iCount
                     iCount += 1
-                
-                
+                                
 def findHostCell(queryPointPosition, domainBlocks, domainMin, domainMax):
 
     for i in range(3):
@@ -38,18 +39,18 @@ def findHostCell(queryPointPosition, domainBlocks, domainMin, domainMax):
 
 
 
-numBlocks =  16
+numBlocks =  8
 domainMin = -1.0
 domainMax =  1.0
 
 # Create a Blocks object
 blocks = Blocks(numBlocks, domainMin, domainMax)
 
-quit()
-num_points = 10
-x = np.random.uniform(-1, 1, num_points)
-y = np.random.uniform(-1, 1, num_points)
-z = np.random.uniform(-1, 1, num_points)
+
+num_points = 32
+x = np.random.uniform(domainMin, domainMax, num_points)
+y = np.random.uniform(domainMin, domainMax, num_points)
+z = np.random.uniform(domainMin, domainMax, num_points)
 
 pointCloud    = np.column_stack((x, y, z))
 triangulation = Delaunay(pointCloud)
