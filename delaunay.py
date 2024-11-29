@@ -38,7 +38,7 @@ def findHostCell(queryPointPosition, domain, vor):
 domainMin = -0.5
 domainMax =  0.5
 startingPoint  = np.array([0., 0.])
-numPoints = 512
+numPoints = 1024
 
 domain = Domain(domainMin, domainMax, 2)
 
@@ -47,9 +47,9 @@ y = np.random.uniform(domain.domainMin, domain.domainMax, numPoints)
 z = np.random.uniform(domain.domainMin, domain.domainMax, numPoints)
 pointCloud    = np.column_stack((x, y))
 
-density = np.where(np.abs(y) <= 0.3, 1, 1)
+density = np.where(np.abs(y) <= 0.1, 10, 0.1)
 
-nRays = 10
+nRays = 1000
 rays = Rays(nRays, startingPoint)
 
 triangulation = Delaunay(pointCloud)
