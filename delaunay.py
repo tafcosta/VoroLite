@@ -11,6 +11,7 @@ class Rays:
         self.ky	= np.zeros(nRays)
         self.xPos = np.zeros(nRays)
         self.yPos = np.zeros(nRays)
+        self.opticalDepth = np.zeros(nRays)
         
         for iRay in range(nRays):
             self.phi = np.random.uniform(0, 2 * np.pi)
@@ -37,16 +38,18 @@ def findHostCell(queryPointPosition, domain, vor):
 domainMin = -1.0
 domainMax =  1.0
 startingPoint  = np.array([0., 0.])
-numPoints = 32
+numPoints = 512
 
 domain = Domain(domainMin, domainMax, 2)
 
-x = np.random.uniform(domainMin, domainMax, numPoints)
-y = np.random.uniform(domainMin, domainMax, numPoints)
-z = np.random.uniform(domainMin, domainMax, numPoints)
+x = np.random.uniform(domain.domainMin, domain.domainMax, numPoints)
+y = np.random.uniform(domain.domainMin, domain.domainMax, numPoints)
+z = np.random.uniform(domain.domainMin, domain.domainMax, numPoints)
 pointCloud    = np.column_stack((x, y))
 
-nRays = 1
+density = np.where(np.abs(y) <= 0.3, 1, 1)
+
+nRays = 10
 rays = Rays(nRays, startingPoint)
 
 triangulation = Delaunay(pointCloud)
@@ -57,19 +60,48 @@ numberNeighbours = indptr[1:]-indptr[:-1]
 
 startingCell   = findHostCell(startingPoint, domain, voronoi)
 
-propagate = True
-while(propagate):
 
-    s = 1.e10
-    for iNeighbour in range(numberNeighbours[startingCell]):
-        normalVector = pointCloud[startingCell] - pointCloud[indices[indptr[startingCell] + iNeighbour]]
-        pointOnInterface = (pointCloud[startingCell] + pointCloud[indices[indptr[startingCell] + iNeighbour]]) / 2.0
 
-        sTmp = np.dot(normalVector,  (pointOnInterface - startingPoint)) / np.dot(normalVector, np.array([rays.kx, rays.ky]))
-        if sTmp > 0:
-            if sTmp < s:
-                s = sTmp
+for iRay in range(rays.nRays):
+    propagate = True
+
+    while(propagate):
+        distanceToExit = 1.e10
+        exitCell  = 0
+
+        for iNeighbour in range(numberNeighbours[startingCell]):
+            normalVector = pointCloud[startingCell] - pointCloud[indices[indptr[startingCell]:indptr[startingCell + 1]][iNeighbour]]
+            pointOnInterface = (pointCloud[startingCell] + pointCloud[indices[indptr[startingCell]:indptr[startingCell + 1]][iNeighbour]]) / 2.0
+            distanceToExitTmp  = np.dot(normalVector,  (pointOnInterface - np.array([rays.xPos[iRay], rays.yPos[iRay]]).ravel())) / np.dot(normalVector, np.array([rays.kx[iRay], rays.ky[iRay]]).ravel())
+
+            if (distanceToExitTmp > 1.e-7) and (distanceToExitTmp < distanceToExit):
+                distanceToExit = distanceToExitTmp
+                exitCell       = indices[indptr[startingCell]:indptr[startingCell + 1]][iNeighbour]
+
+        if distanceToExit > (domain.domainMax - domain.domainMin):
+            distanceToExitTmp = (domain.domainMin - rays.xPos[iRay]) / rays.kx[iRay]
+            if (distanceToExitTmp > 1.e-7) and (distanceToExitTmp < distanceToExit):
+                distanceToExit = distanceToExitTmp
+            
+            distanceToExitTmp =	(domain.domainMax - rays.xPos[iRay]) / rays.kx[iRay]
+            if (distanceToExitTmp > 1.e-7) and (distanceToExitTmp < distanceToExit):
+                distanceToExit = distanceToExitTmp
+
+            distanceToExitTmp =	(domain.domainMin - rays.yPos[iRay]) / rays.ky[iRay]
+            if (distanceToExitTmp > 1.e-7) and (distanceToExitTmp < distanceToExit):
+                distanceToExit = distanceToExitTmp
+            
+            distanceToExitTmp = (domain.domainMax - rays.yPos[iRay]) / rays.ky[iRay]
+            if (distanceToExitTmp > 1.e-7) and (distanceToExitTmp < distanceToExit):
+                distanceToExit = distanceToExitTmp
+                        
+        rays.xPos[iRay] += rays.kx[iRay] * distanceToExit
+        rays.yPos[iRay] += rays.ky[iRay] * distanceToExit
+        rays.opticalDepth[iRay] += distanceToExit * density[startingCell]
         
-        print(sTmp, s)
+        if rays.xPos[iRay] < domain.domainMin or rays.xPos[iRay] > domain.domainMax:
+            propagate = False
+        if rays.yPos[iRay] < domain.domainMin or rays.yPos[iRay] > domain.domainMax:
+            propagate = False
 
-    propagate = False
+        startingCell = exitCell
