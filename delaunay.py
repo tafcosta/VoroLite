@@ -35,8 +35,8 @@ def findHostCell(queryPointPosition, domain, vor):
     return np.argmin(np.linalg.norm(vor.points - queryPointPosition, axis=1))
 
 
-domainMin = -1.0
-domainMax =  1.0
+domainMin = -0.5
+domainMax =  0.5
 startingPoint  = np.array([0., 0.])
 numPoints = 512
 
@@ -65,20 +65,21 @@ startingCell   = findHostCell(startingPoint, domain, voronoi)
 for iRay in range(rays.nRays):
     propagate = True
 
+    iCell = startingCell
     while(propagate):
         distanceToExit = 1.e10
         exitCell  = 0
 
-        for iNeighbour in range(numberNeighbours[startingCell]):
-            normalVector = pointCloud[startingCell] - pointCloud[indices[indptr[startingCell]:indptr[startingCell + 1]][iNeighbour]]
-            pointOnInterface = (pointCloud[startingCell] + pointCloud[indices[indptr[startingCell]:indptr[startingCell + 1]][iNeighbour]]) / 2.0
+        for iNeighbour in range(numberNeighbours[iCell]):
+            normalVector = pointCloud[iCell] - pointCloud[indices[indptr[iCell]:indptr[iCell + 1]][iNeighbour]]
+            pointOnInterface = (pointCloud[iCell] + pointCloud[indices[indptr[iCell]:indptr[iCell + 1]][iNeighbour]]) / 2.0
             distanceToExitTmp  = np.dot(normalVector,  (pointOnInterface - np.array([rays.xPos[iRay], rays.yPos[iRay]]).ravel())) / np.dot(normalVector, np.array([rays.kx[iRay], rays.ky[iRay]]).ravel())
 
             if (distanceToExitTmp > 1.e-7) and (distanceToExitTmp < distanceToExit):
                 distanceToExit = distanceToExitTmp
-                exitCell       = indices[indptr[startingCell]:indptr[startingCell + 1]][iNeighbour]
+                exitCell       = indices[indptr[iCell]:indptr[iCell + 1]][iNeighbour]
 
-        if distanceToExit > (domain.domainMax - domain.domainMin):
+        if distanceToExit > np.sqrt(2 * ((domain.domainMax - domain.domainMin)/2)**2):
             distanceToExitTmp = (domain.domainMin - rays.xPos[iRay]) / rays.kx[iRay]
             if (distanceToExitTmp > 1.e-7) and (distanceToExitTmp < distanceToExit):
                 distanceToExit = distanceToExitTmp
@@ -94,14 +95,14 @@ for iRay in range(rays.nRays):
             distanceToExitTmp = (domain.domainMax - rays.yPos[iRay]) / rays.ky[iRay]
             if (distanceToExitTmp > 1.e-7) and (distanceToExitTmp < distanceToExit):
                 distanceToExit = distanceToExitTmp
-                        
+
         rays.xPos[iRay] += rays.kx[iRay] * distanceToExit
         rays.yPos[iRay] += rays.ky[iRay] * distanceToExit
-        rays.opticalDepth[iRay] += distanceToExit * density[startingCell]
+        rays.opticalDepth[iRay] += distanceToExit * density[iCell]
         
         if rays.xPos[iRay] < domain.domainMin or rays.xPos[iRay] > domain.domainMax:
             propagate = False
         if rays.yPos[iRay] < domain.domainMin or rays.yPos[iRay] > domain.domainMax:
             propagate = False
 
-        startingCell = exitCell
+        iCell = exitCell
