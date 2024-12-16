@@ -13,6 +13,8 @@ class Rays:
         self.xPos = np.zeros(nRays)
         self.yPos = np.zeros(nRays)
         self.opticalDepth = np.zeros(nRays)
+        self.nTraversedCells = np.zeros(nRays)
+        self.traversedCells = np.empty(nRays, dtype=object)
         
         for iRay in range(nRays):
             self.phi = np.random.uniform(0, 2 * np.pi)
@@ -35,70 +37,61 @@ def findHostCell(queryPointPosition, domain, vor):
         
     return np.argmin(np.linalg.norm(vor.points - queryPointPosition, axis=1))
 
+def getBoundaryCells(voronoi):
 
+    isBoundary = np.zeros(len(voronoi.point_region))
+    
+    for iCell in np.arange(len(voronoi.point_region)):
+        isBoundary[iCell] = int(-1 in voronoi.regions[voronoi.point_region[iCell]])
+
+    return isBoundary
+        
 domainMin = -0.5
 domainMax =  0.5
 startingPoint  = np.array([0., 0.])
-numPoints = 2048
+numPoints = 512
 
 domain = Domain(domainMin, domainMax, 2)
 
-# Calculate maximum radius for the polar grid
-max_radius = (domainMax - domainMin) / 2
-
-# Calculate the number of radial and angular divisions
-num_radii = int(np.sqrt(numPoints))  # Number of radial intervals
-num_angles = int(numPoints / num_radii)  # Number of angular intervals
-
-# Generate the radial and angular divisions
-radii = np.linspace(0, max_radius, num_radii)  # Radial intervals (uniform spacing)
-angles = np.linspace(0, 2 * np.pi, num_angles, endpoint=False)  # Angular intervals
-
-# Create the grid using meshgrid
-r, theta = np.meshgrid(radii, angles)
-
-# Convert polar coordinates to Cartesian coordinates
-x = r * np.cos(theta)
-y = r * np.sin(theta)
-
-# Flatten the grid arrays (to return as 1D arrays for plotting or further use)
-x = x.flatten()
-y = y.flatten()
+x = np.random.uniform(domain.domainMin, domain.domainMax, numPoints)
+y = np.random.uniform(domain.domainMin, domain.domainMax, numPoints)
 
 pointCloud    = np.column_stack((x, y))
+density       = np.where(np.sqrt(x**2 + y**2) <= 0.1, 1, 0.0)
 
-density = np.where(np.sqrt(x**2 + y**2) <= 0.1, 1, 0.0)
 
-nRays = 10000
-rays = Rays(nRays, startingPoint)
 
-triangulation = Delaunay(pointCloud)
-voronoi = Voronoi(pointCloud)
 
-indptr,indices = triangulation.vertex_neighbor_vertices
+nRays = 10
+rays  = Rays(nRays, startingPoint)
+
+triangulation    = Delaunay(pointCloud)
+voronoi          = Voronoi(pointCloud)
+
+indptr,indices   = triangulation.vertex_neighbor_vertices
 numberNeighbours = indptr[1:]-indptr[:-1]
-
-startingCell   = findHostCell(startingPoint, domain, voronoi)
-
-
+boundaryFlag     = getBoundaryCells(voronoi)
+startingCell     = findHostCell(startingPoint, domain, voronoi)
 
 for iRay in range(rays.nRays):
     propagate = True
     iCell = startingCell
-    
+        
     while(propagate):
         distanceToExit = sys.float_info.max
         exitCell  = 0
 
         for iNeighbour in range(numberNeighbours[iCell]):
-            normalVector = pointCloud[iCell] - pointCloud[indices[indptr[iCell]:indptr[iCell + 1]][iNeighbour]]
-            pointOnInterface = (pointCloud[iCell] + pointCloud[indices[indptr[iCell]:indptr[iCell + 1]][iNeighbour]]) / 2.0
+            normalVector       = pointCloud[iCell] - pointCloud[indices[indptr[iCell]:indptr[iCell + 1]][iNeighbour]]
+            pointOnInterface   = (pointCloud[iCell] + pointCloud[indices[indptr[iCell]:indptr[iCell + 1]][iNeighbour]]) / 2.0
             distanceToExitTmp  = np.dot(normalVector,  (pointOnInterface - np.array([rays.xPos[iRay], rays.yPos[iRay]]).ravel())) / np.dot(normalVector, np.array([rays.kx[iRay], rays.ky[iRay]]).ravel())
 
             if (distanceToExitTmp > sys.float_info.epsilon) and (distanceToExitTmp < distanceToExit):
                 distanceToExit = distanceToExitTmp
                 exitCell       = indices[indptr[iCell]:indptr[iCell + 1]][iNeighbour]
 
+            rays.nTraversedCells[iRay] += 1
+            
         if distanceToExit > np.sqrt(2 * ((domain.domainMax - domain.domainMin)/2)**2):
             distanceToExitTmp = (domain.domainMin - rays.xPos[iRay]) / rays.kx[iRay]
             if (distanceToExitTmp > sys.float_info.epsilon) and (distanceToExitTmp < distanceToExit):
@@ -120,10 +113,12 @@ for iRay in range(rays.nRays):
         rays.xPos[iRay] += rays.kx[iRay] * distanceToExit
         rays.yPos[iRay] += rays.ky[iRay] * distanceToExit
         rays.opticalDepth[iRay] += distanceToExit * density[iCell]
-        
-        if rays.xPos[iRay] < domain.domainMin or rays.xPos[iRay] > domain.domainMax:
-            propagate = False
-        if rays.yPos[iRay] < domain.domainMin or rays.yPos[iRay] > domain.domainMax:
-            propagate = False
+
+        rays.traversedCells[iRay] = np.append(rays.traversedCells[iRay], iCell)
 
         iCell = exitCell
+        
+        if(boundaryFlag[iCell] != 0):
+            propagate = False
+            rays.traversedCells[iRay] = np.append(rays.traversedCells[iRay], exitCell)
+            
