@@ -62,7 +62,7 @@ density       = np.where(np.sqrt(x**2 + y**2) <= 0.1, 1, 0.0)
 
 
 
-nRays = 1000
+nRays = 10000
 rays  = Rays(nRays, startingPoint)
 
 triangulation    = Delaunay(pointCloud)
@@ -92,13 +92,13 @@ for iRay in range(rays.nRays):
             else:
                 continue
 
-            if ((distanceToExitTmp < distanceToExit) and (distanceToExitTmp > sys.float_info.epsilon)):
+            if ((distanceToExitTmp < distanceToExit) and (distanceToExitTmp > 1.e-8)):
                 distanceToExit = distanceToExitTmp
                 exitCell       = indices[indptr[iCell]:indptr[iCell + 1]][iNeighbour]
 
                 numberPossibleNeighbours += 1
 
-            print(distanceToExitTmp, numberNeighbours[iCell], iCell)
+#            print(distanceToExitTmp, numberNeighbours[iCell], iCell)
 
                 
         if(numberPossibleNeighbours == 0):
