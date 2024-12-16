@@ -38,9 +38,7 @@ def findHostCell(queryPointPosition, domain, vor):
     return np.argmin(np.linalg.norm(vor.points - queryPointPosition, axis=1))
 
 def getBoundaryCells(voronoi):
-
     isBoundary = np.zeros(len(voronoi.point_region))
-    
     for iCell in np.arange(len(voronoi.point_region)):
         isBoundary[iCell] = int(-1 in voronoi.regions[voronoi.point_region[iCell]])
 
@@ -92,13 +90,13 @@ for iRay in range(rays.nRays):
             else:
                 continue
 
-            if ((distanceToExitTmp < distanceToExit) and (distanceToExitTmp > 1.e-8)):
+            if ((distanceToExitTmp < distanceToExit) and (distanceToExitTmp > 0)):
                 distanceToExit = distanceToExitTmp
                 exitCell       = indices[indptr[iCell]:indptr[iCell + 1]][iNeighbour]
 
                 numberPossibleNeighbours += 1
 
-#            print(distanceToExitTmp, numberNeighbours[iCell], iCell)
+            #print(distanceToExitTmp, numberNeighbours[iCell], iCell)
 
                 
         if(numberPossibleNeighbours == 0):
@@ -106,8 +104,8 @@ for iRay in range(rays.nRays):
 
         rays.nTraversedCells[iRay] += 1
         
-        rays.xPos[iRay] += rays.kx[iRay] * distanceToExit
-        rays.yPos[iRay] += rays.ky[iRay] * distanceToExit
+        rays.xPos[iRay] += rays.kx[iRay] * distanceToExit * 1.0000001
+        rays.yPos[iRay] += rays.ky[iRay] * distanceToExit * 1.0000001
         rays.opticalDepth[iRay] += distanceToExit * density[iCell]
 
         rays.traversedCells[iRay] = np.append(rays.traversedCells[iRay], iCell)
