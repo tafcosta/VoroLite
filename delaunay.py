@@ -15,6 +15,7 @@ class Rays:
         self.opticalDepth = np.zeros(nRays)
         self.nTraversedCells = np.zeros(nRays)
         self.traversedCells = np.empty(nRays, dtype=object)
+        self.traversedCellDensities = np.empty(nRays, dtype=object)
         
         for iRay in range(nRays):
             self.phi = np.random.uniform(0, 2 * np.pi)
@@ -37,6 +38,35 @@ def findHostCell(queryPointPosition, domain, vor):
         
     return np.argmin(np.linalg.norm(vor.points - queryPointPosition, axis=1))
 
+def findNextCell(iCell, iRay, pointCloud, indptr, indices, numberNeighbours, rays):
+
+    distanceToExit = sys.float_info.max
+    exitCell  = -1
+    numberPossibleNeighbours =  0
+    
+    for iNeighbour in range(numberNeighbours[iCell]):
+        normalVector       = pointCloud[iCell] - pointCloud[indices[indptr[iCell]:indptr[iCell + 1]][iNeighbour]]
+        pointOnInterface   = (pointCloud[iCell] + pointCloud[indices[indptr[iCell]:indptr[iCell + 1]][iNeighbour]]) / 2.0
+        denominator        = np.dot(normalVector, np.array([rays.kx[iRay], rays.ky[iRay]]).ravel())
+
+        if(np.abs(denominator) > sys.float_info.epsilon):
+            distanceToExitTmp  = np.dot(normalVector,  (pointOnInterface - np.array([rays.xPos[iRay], rays.yPos[iRay]]).ravel())) / denominator
+        else:
+            continue
+
+        if ((distanceToExitTmp < distanceToExit) and (distanceToExitTmp > 0)):
+            distanceToExit = distanceToExitTmp
+            exitCell = indices[indptr[iCell]:indptr[iCell + 1]][iNeighbour]
+            numberPossibleNeighbours += 1
+
+    if(numberPossibleNeighbours == 0):
+        raise ValueError(f"Error: Loop terminated because no elligible neighbours were found.")
+
+    if(exitCell == -1):
+        raise ValueError(f"No exit cell found.")
+    
+    return exitCell, distanceToExit
+    
 def getBoundaryCells(voronoi):
     isBoundary = np.zeros(len(voronoi.point_region))
     for iCell in np.arange(len(voronoi.point_region)):
@@ -68,52 +98,26 @@ voronoi          = Voronoi(pointCloud)
 
 indptr,indices   = triangulation.vertex_neighbor_vertices
 numberNeighbours = indptr[1:]-indptr[:-1]
-boundaryFlag     = getBoundaryCells(voronoi)
-startingCell     = findHostCell(startingPoint, domain, voronoi)
+boundaryFlag  = getBoundaryCells(voronoi)
+startCell     = findHostCell(startingPoint, domain, voronoi)
 
 for iRay in range(rays.nRays):
-    propagate = True
-    iCell = startingCell
+
+    iCell = startCell        
+    while(boundaryFlag[iCell] == 0):
+
+        exitCell, distanceToExit = findNextCell(iCell, iRay, pointCloud, indptr, indices, numberNeighbours, rays)
         
-    while(propagate):
-        distanceToExit = sys.float_info.max
-        exitCell  = 0
-
-        numberPossibleNeighbours =  0
-        for iNeighbour in range(numberNeighbours[iCell]):
-            normalVector       = pointCloud[iCell] - pointCloud[indices[indptr[iCell]:indptr[iCell + 1]][iNeighbour]]
-            pointOnInterface   = (pointCloud[iCell] + pointCloud[indices[indptr[iCell]:indptr[iCell + 1]][iNeighbour]]) / 2.0
-            denominator        = np.dot(normalVector, np.array([rays.kx[iRay], rays.ky[iRay]]).ravel())
-
-            if(np.abs(denominator) > sys.float_info.epsilon):
-                distanceToExitTmp  = np.dot(normalVector,  (pointOnInterface - np.array([rays.xPos[iRay], rays.yPos[iRay]]).ravel())) / denominator
-            else:
-                continue
-
-            if ((distanceToExitTmp < distanceToExit) and (distanceToExitTmp > 0)):
-                distanceToExit = distanceToExitTmp
-                exitCell       = indices[indptr[iCell]:indptr[iCell + 1]][iNeighbour]
-
-                numberPossibleNeighbours += 1
-
-            #print(distanceToExitTmp, numberNeighbours[iCell], iCell)
-
-                
-        if(numberPossibleNeighbours == 0):
-            raise ValueError(f"Error: Loop terminated because no elligible neighbours were found.")
-
-        rays.nTraversedCells[iRay] += 1
-        
+        rays.nTraversedCells[iRay] += 1        
         rays.xPos[iRay] += rays.kx[iRay] * distanceToExit * 1.0000001
         rays.yPos[iRay] += rays.ky[iRay] * distanceToExit * 1.0000001
         rays.opticalDepth[iRay] += distanceToExit * density[iCell]
-
         rays.traversedCells[iRay] = np.append(rays.traversedCells[iRay], iCell)
-
+        rays.traversedCellDensities[iRay] = np.append(rays.traversedCellDensities[iRay], density[iCell])
+        
         iCell = exitCell
         
         if(boundaryFlag[iCell] != 0):
-            propagate = False
             rays.traversedCells[iRay] = np.append(rays.traversedCells[iRay], exitCell)
 
             distanceToExit = sys.float_info.max
@@ -135,3 +139,5 @@ for iRay in range(rays.nRays):
                 distanceToExitTmp = (domain.domainMax - rays.yPos[iRay]) / rays.ky[iRay]
                 if ((distanceToExitTmp < distanceToExit) and (distanceToExitTmp > sys.float_info.epsilon)):
                         distanceToExit = distanceToExitTmp
+
+            continue
