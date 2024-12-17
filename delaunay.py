@@ -16,6 +16,7 @@ class Rays:
         self.nTraversedCells = np.zeros(nRays)
         self.traversedCells = np.empty(nRays, dtype=object)
         self.traversedCellDensities = np.empty(nRays, dtype=object)
+        self.inDomain = np.ones(nRays, dtype=bool)
         
         for iRay in range(nRays):
             self.phi = np.random.uniform(0, 2 * np.pi)
@@ -73,24 +74,54 @@ def getBoundaryCells(voronoi):
         isBoundary[iCell] = int(-1 in voronoi.regions[voronoi.point_region[iCell]])
 
     return isBoundary
-        
+
+def getDistanceToBoundary(domain, ray, iRay):
+    distanceToExit = sys.float_info.max
+    exitCell  = -1
+    
+    if(np.abs(rays.kx[iRay]) > sys.float_info.epsilon):
+        distanceToExitTmp = (domain.domainMin - rays.xPos[iRay]) / rays.kx[iRay]
+        if (distanceToExitTmp < distanceToExit and distanceToExitTmp > 0):
+            distanceToExit = distanceToExitTmp
+
+        distanceToExitTmp = (domain.domainMax - rays.xPos[iRay]) / rays.kx[iRay]
+        if ((distanceToExitTmp < distanceToExit) and (distanceToExitTmp > 0)):
+            distanceToExit = distanceToExitTmp
+
+    if(np.abs(rays.ky[iRay]) > sys.float_info.epsilon):
+        distanceToExitTmp = (domain.domainMin - rays.yPos[iRay]) / rays.ky[iRay]
+        if ((distanceToExitTmp < distanceToExit) and (distanceToExitTmp > 0)):
+            distanceToExit = distanceToExitTmp
+            
+        distanceToExitTmp = (domain.domainMax - rays.yPos[iRay]) / rays.ky[iRay]
+        if ((distanceToExitTmp < distanceToExit) and (distanceToExitTmp > 0)):
+            distanceToExit = distanceToExitTmp
+
+    return exitCell, distanceToExit
+
+
+#input parameters
+
 domainMin = -0.5
 domainMax =  0.5
+nDim = 2
 startingPoint  = np.array([0., 0.])
 numPoints = 256
 
-domain = Domain(domainMin, domainMax, 2)
+domain = Domain(domainMin, domainMax, nDim)
 
 x = np.random.uniform(domain.domainMin, domain.domainMax, numPoints)
 y = np.random.uniform(domain.domainMin, domain.domainMax, numPoints)
 
 pointCloud    = np.column_stack((x, y))
 density       = np.where(np.sqrt(x**2 + y**2) <= 0.1, 1, 0.0)
-
-
-
-
 nRays = 10000
+
+
+
+
+# ray-tracing (do not change)
+
 rays  = Rays(nRays, startingPoint)
 
 triangulation    = Delaunay(pointCloud)
@@ -98,46 +129,25 @@ voronoi          = Voronoi(pointCloud)
 
 indptr,indices   = triangulation.vertex_neighbor_vertices
 numberNeighbours = indptr[1:]-indptr[:-1]
-boundaryFlag  = getBoundaryCells(voronoi)
-startCell     = findHostCell(startingPoint, domain, voronoi)
+boundaryFlag     = getBoundaryCells(voronoi)
+startCell        = findHostCell(startingPoint, domain, voronoi)
 
 for iRay in range(rays.nRays):
-
-    iCell = startCell        
-    while(boundaryFlag[iCell] == 0):
-
-        exitCell, distanceToExit = findNextCell(iCell, iRay, pointCloud, indptr, indices, numberNeighbours, rays)
+    
+    iCell = startCell
+    while(rays.inDomain[iRay]):
         
-        rays.nTraversedCells[iRay] += 1        
+        if boundaryFlag[iCell] != 0 :
+            exitCell, distanceToExit = getDistanceToBoundary(domain, rays, iRay)
+            rays.inDomain[iRay] = False
+        else:
+            exitCell, distanceToExit = findNextCell(iCell, iRay, pointCloud, indptr, indices, numberNeighbours, rays)
+
+        rays.nTraversedCells[iRay] += 1
         rays.xPos[iRay] += rays.kx[iRay] * distanceToExit * 1.0000001
         rays.yPos[iRay] += rays.ky[iRay] * distanceToExit * 1.0000001
         rays.opticalDepth[iRay] += distanceToExit * density[iCell]
         rays.traversedCells[iRay] = np.append(rays.traversedCells[iRay], iCell)
         rays.traversedCellDensities[iRay] = np.append(rays.traversedCellDensities[iRay], density[iCell])
-        
+
         iCell = exitCell
-        
-        if(boundaryFlag[iCell] != 0):
-            rays.traversedCells[iRay] = np.append(rays.traversedCells[iRay], exitCell)
-
-            distanceToExit = sys.float_info.max
-
-            if(rays.kx[iRay] > sys.float_info.epsilon):
-                distanceToExitTmp = (domain.domainMin - rays.xPos[iRay]) / rays.kx[iRay]
-                if ((distanceToExitTmp < distanceToExit) and (distanceToExitTmp > sys.float_info.epsilon)):
-                    distanceToExit = distanceToExitTmp
-                    
-                distanceToExitTmp = (domain.domainMax - rays.xPos[iRay]) / rays.kx[iRay]
-                if ((distanceToExitTmp < distanceToExit) and (distanceToExitTmp > sys.float_info.epsilon)):
-                    distanceToExit = distanceToExitTmp
-
-            if(rays.ky[iRay] > sys.float_info.epsilon):
-                distanceToExitTmp = (domain.domainMin - rays.yPos[iRay]) / rays.ky[iRay]
-                if ((distanceToExitTmp < distanceToExit) and (distanceToExitTmp > sys.float_info.epsilon)):
-                    distanceToExit = distanceToExitTmp
-
-                distanceToExitTmp = (domain.domainMax - rays.yPos[iRay]) / rays.ky[iRay]
-                if ((distanceToExitTmp < distanceToExit) and (distanceToExitTmp > sys.float_info.epsilon)):
-                        distanceToExit = distanceToExitTmp
-
-            continue
