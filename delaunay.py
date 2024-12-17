@@ -10,8 +10,12 @@ class Rays:
         self.nRays = nRays
         self.kx = np.zeros(nRays)
         self.ky	= np.zeros(nRays)
+        self.kz = np.zeros(nRays)
+        
         self.xPos = np.zeros(nRays)
         self.yPos = np.zeros(nRays)
+        self.zPos = np.zeros(nRays)
+        
         self.opticalDepth = np.zeros(nRays)
         self.nTraversedCells = np.zeros(nRays)
         self.traversedCells = np.empty(nRays, dtype=object)
@@ -19,12 +23,17 @@ class Rays:
         self.inDomain = np.ones(nRays, dtype=bool)
         
         for iRay in range(nRays):
-            self.phi = np.random.uniform(0, 2 * np.pi)
-            self.kx[iRay]   = np.cos(self.phi)
-            self.ky[iRay]   = np.sin(self.phi)
+            self.phi   = np.random.uniform(0, 2 * np.pi)
+            self.theta = np.arccos(1 - 2 * np.random.uniform(0, 1))
+            
+            self.kx[iRay]   = np.cos(self.phi) * np.sin(self.theta)
+            self.ky[iRay]   = np.sin(self.phi) * np.sin(self.theta)
+            self.kz[iRay]   = np.cos(self.theta)
+            
             self.xPos[iRay] = startingPosition[0]
             self.yPos[iRay] = startingPosition[1]
-
+            self.zPos[iRay] = startingPosition[2]
+            
 class Domain:
     def __init__(self, domainMin, domainMax, nDim):
         self.domainMin = domainMin
@@ -48,10 +57,10 @@ def findNextCell(iCell, iRay, pointCloud, indptr, indices, numberNeighbours, ray
     for iNeighbour in range(numberNeighbours[iCell]):
         normalVector       = pointCloud[iCell] - pointCloud[indices[indptr[iCell]:indptr[iCell + 1]][iNeighbour]]
         pointOnInterface   = (pointCloud[iCell] + pointCloud[indices[indptr[iCell]:indptr[iCell + 1]][iNeighbour]]) / 2.0
-        denominator        = np.dot(normalVector, np.array([rays.kx[iRay], rays.ky[iRay]]).ravel())
+        denominator        = np.dot(normalVector, np.array([rays.kx[iRay], rays.ky[iRay], rays.kz[iRay]]).ravel())
 
         if(np.abs(denominator) > sys.float_info.epsilon):
-            distanceToExitTmp  = np.dot(normalVector,  (pointOnInterface - np.array([rays.xPos[iRay], rays.yPos[iRay]]).ravel())) / denominator
+            distanceToExitTmp  = np.dot(normalVector,  (pointOnInterface - np.array([rays.xPos[iRay], rays.yPos[iRay], rays.zPos[iRay]]).ravel())) / denominator
         else:
             continue
 
@@ -104,17 +113,18 @@ def getDistanceToBoundary(domain, ray, iRay):
 
 domainMin = -0.5
 domainMax =  0.5
-nDim = 2
-startingPoint  = np.array([0., 0.])
-numPoints = 256
+nDim = 3
+startingPoint  = np.array([0., 0., 0.])
+numPoints = 10000
 
 domain = Domain(domainMin, domainMax, nDim)
 
 x = np.random.uniform(domain.domainMin, domain.domainMax, numPoints)
 y = np.random.uniform(domain.domainMin, domain.domainMax, numPoints)
+z = np.random.uniform(domain.domainMin, domain.domainMax, numPoints)
 
-pointCloud    = np.column_stack((x, y))
-density       = np.where(np.sqrt(x**2 + y**2) <= 0.1, 1, 0.0)
+pointCloud    = np.column_stack((x, y, z))
+density       = np.where(np.sqrt(x**2 + y**2 + z**2) <= 0.1, 1, 0.0)
 nRays = 10000
 
 
@@ -144,8 +154,11 @@ for iRay in range(rays.nRays):
             exitCell, distanceToExit = findNextCell(iCell, iRay, pointCloud, indptr, indices, numberNeighbours, rays)
 
         rays.nTraversedCells[iRay] += 1
+        
         rays.xPos[iRay] += rays.kx[iRay] * distanceToExit * 1.0000001
         rays.yPos[iRay] += rays.ky[iRay] * distanceToExit * 1.0000001
+        rays.zPos[iRay] += rays.kz[iRay] * distanceToExit * 1.0000001
+        
         rays.opticalDepth[iRay] += distanceToExit * density[iCell]
         rays.traversedCells[iRay] = np.append(rays.traversedCells[iRay], iCell)
         rays.traversedCellDensities[iRay] = np.append(rays.traversedCellDensities[iRay], density[iCell])
