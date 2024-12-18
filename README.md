@@ -20,4 +20,4 @@
    ```bash
    python VoroLite.py
    
-This will simulate ray-tracing starting from the origin (0, 0, 0) in a 3D domain defined by domainMin = -0.5 and domainMax = 0.5. You can adjust the parameters such as the number of rays (nRays) and the number of points in the domain (numPoints) in the script.
+This will simulate ray-tracing starting from the origin (0, 0, 0) in a 3D domain defined by domainMin = -0.5 and domainMax = 0.5. You can adjust the parameters such as the number of rays (nRays) and the domain size and properties in the script.
